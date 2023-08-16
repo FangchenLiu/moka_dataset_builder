@@ -633,16 +633,15 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                 os.path.exists(p + '/recordings/MP4')]
 
-        episode_paths = episode_paths[:3]
         # for smallish datasets, use single-thread parsing
-        for sample in episode_paths:
-            yield _parse_example(sample)
+        #for sample in episode_paths:
+        #    yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        #beam = tfds.core.lazy_imports.apache_beam
-        #return (
-        #         beam.Create(episode_paths)
-       #          | beam.Map(_parse_example)
-        #)
+        beam = tfds.core.lazy_imports.apache_beam
+        return (
+                 beam.Create(episode_paths)
+                 | beam.Map(_parse_example)
+        )
 
 
