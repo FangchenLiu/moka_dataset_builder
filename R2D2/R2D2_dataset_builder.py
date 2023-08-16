@@ -6,12 +6,14 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 import tensorflow_hub as hub
 import os
-import h5py
 import cv2
+import h5py
 import json
+import io
 from collections import defaultdict
 import random
 from copy import deepcopy
+from PIL import Image
 
 camera_type_dict = {
     'hand_camera_id': 0,
@@ -43,7 +45,6 @@ class MP4Reader:
         # Open Video Reader #
         self._mp4_reader = cv2.VideoCapture(filepath)
         if not self._mp4_reader.isOpened():
-            print(filepath)
             raise RuntimeError("Corrupted MP4 File")
 
         # Load Recording Timestamps #
@@ -413,94 +414,94 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
             'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'exterior_image_1_left': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Exterior camera 1 left viewpoint',
                         ),
                         'exterior_image_1_right': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Exterior camera 1 right viewpoint'
                         ),
                         'exterior_image_2_left': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Exterior camera 2 left viewpoint'
                         ),
                         'exterior_image_2_right': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Exterior camera 2 right viewpoint'
                         ),
                         'wrist_image_left': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Wrist camera RGB left viewpoint',
                         ),
                         'wrist_image_right': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(180, 320, 3),
                             dtype=np.uint8,
-                            encoding_format='jpeg',
+                            #encoding_format='jpeg',
                             doc='Wrist camera RGB right viewpoint'
                         ),
                         'cartesian_position': tfds.features.Tensor(
                             shape=(6,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Robot Cartesian state',
                         ),
                         'gripper_position': tfds.features.Tensor(
                             shape=(1,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Gripper position statae',
                         ),
                         'joint_position': tfds.features.Tensor(
                             shape=(7,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Joint position state'
                         )
                     }),
-                    'action': tfds.features.FeaturesDict({
+                    'action_dict': tfds.features.FeaturesDict({
                         'cartesian_position': tfds.features.Tensor(
                             shape=(6,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded Cartesian position'
                         ),
                         'cartesian_velocity': tfds.features.Tensor(
                             shape=(6,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded Cartesian velocity'
                         ),
                         'gripper_position': tfds.features.Tensor(
                             shape=(1,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded gripper position'
                         ),
                         'gripper_velocity': tfds.features.Tensor(
                             shape=(1,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded gripper velocity'
                         ),
                         'joint_position': tfds.features.Tensor(
                             shape=(7,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded joint position'
                         ),
                         'joint_velocity': tfds.features.Tensor(
                             shape=(7,),
-                            dtype=np.float32,
+                            dtype=np.float64,
                             doc='Commanded joint velocity'
                         )
                     }),
                     'action': tfds.features.Tensor(
-                        shape=(10,),
-                        dtype=np.float32,
-                        doc='Robot action, consists of [7x joint velocities, \
-                            2x gripper velocities, 1x terminate episode].',
+                        shape=(7,),
+                        dtype=np.float64,
+                        doc='Robot action, consists of [6x joint velocities, \
+                            1x gripper position].',
                     ),
                     'discount': tfds.features.Scalar(
                         dtype=np.float32,
@@ -536,6 +537,9 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                     'file_path': tfds.features.Text(
                         doc='Path to the original data file.'
                     ),
+                    'recording_folderpath': tfds.features.Text(
+                        doc='Path to the folder of recordings.'
+                    )
                 }),
             }))
 
@@ -551,38 +555,31 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         """Generator of examples for each split."""
 
         def _resize_and_encode(image, size):
-            return tf.io.encode_jpeg(tf.cat(tf.round(tf.image.resize(image, size, method="bicubic")),
-                tf.uint8))
-
-        def flatten(x):
-            d = {}
-            for k, v in x.items():
-                if isinstance(v, dict):
-                    for k2, v2 in flatten(v).items():
-                        d[k + "/" + k2] = v2
-                else:
-                    d[k] = v
-            return d
-
+            image = Image.fromarray(image)
+            return np.array(image.resize(size, resample=Image.BICUBIC))
+        
 
         def _parse_example(episode_path):
             FRAMESKIP = 1
-            IMAGE_SIZE = (256, 256)
+            IMAGE_SIZE = (320, 180)
 
             h5_filepath = os.path.join(episode_path, 'trajectory.h5')
             recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
                 
             traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-            traj = traj[::FRAMESKIP]
+            data  = traj[::FRAMESKIP]
 
-            data = [flatten(t) for t in traj]
-            assert all(t.keys() == traj_flat[0].keys() for t in data)
-
+            assert all(t.keys() == data[0].keys() for t in data)
             for t in range(len(data)):
-                for key in traj_flat[0].keys():
-                    traj_flat[t][key] = _resize_and_encode(traj_flat[i][key], IMAGE_SIZE)
-                
-
+                for key in data[0]['observation']['image'].keys():
+                    #import matplotlib.pyplot as plt
+                    #plt.imshow(data[t]['observation']['image'][key])
+                    #plt.savefig('out.png')
+                    #import pdb; pdb.set_trace()
+                    data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key], IMAGE_SIZE)
+                    #plt.imshow(data[t]['observation']['image'][key])
+                    #plt.savefig('out.png')
+            
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
             episode = []
             for i, step in enumerate(data):
@@ -600,17 +597,18 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                         'wrist_image_left': obs['image']['19824535_left'],
                         'wrist_image_right': obs['image']['19824535_right'],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
-                        'joint_position': obs['robot_state']['joint_position'],
-                        'gripper_position': obs['robot_state']['gripper_position'],
+                        'joint_position': obs['robot_state']['joint_positions'],
+                        'gripper_position': np.array([obs['robot_state']['gripper_position']]),
                     },
-                    'action': {
+                    'action_dict': {
                         'cartesian_position': action['cartesian_position'],
                         'cartesian_velocity': action['cartesian_velocity'],
-                        'gripper_position': action['gripper_position'],
-                        'gripper_velocity': action['gripper_velocity'],
+                        'gripper_position': np.array([action['gripper_position']]),
+                        'gripper_velocity': np.array([action['gripper_velocity']]),
                         'joint_position': action['joint_position'],
                         'joint_velocity': action['joint_velocity'],
                     },
+                    'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
                     'discount': 1.0,
                     'reward': float(i == (len(data) - 1)),
                     'is_first': i == 0,
@@ -619,7 +617,6 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                     'language_instruction': language_instruction,
                     'language_embedding': language_embedding,
                 })
-
             # create output data sample
             sample = {
                 'steps': episode,
@@ -628,7 +625,6 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                     'recording_folderpath': recording_folderpath
                 }
             }
-
             # if you want to skip an example for whatever reason, simply return None
             return episode_path, sample
 
@@ -637,16 +633,15 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                 os.path.exists(p + '/recordings/MP4')]
 
-        print(episode_paths)
         # for smallish datasets, use single-thread parsing
-        for sample in episode_paths:
-            yield _parse_example(sample)
+        #for sample in episode_paths:
+        #    yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        #beam = tfds.core.lazy_imports.apache_beam
-        #return (
-        #         beam.Create(episode_paths)
-        #         | beam.Map(_parse_example)
-        #)
+        beam = tfds.core.lazy_imports.apache_beam
+        return (
+                 beam.Create(episode_paths)
+                 | beam.Map(_parse_example)
+        )
 
 

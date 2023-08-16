@@ -7,7 +7,7 @@ import tensorflow_datasets as tfds
 import numpy as np
 import matplotlib.pyplot as plt
 import wandb
-
+import tensorflow as tf
 
 WANDB_ENTITY = None
 WANDB_PROJECT = 'vis_rlds'
@@ -36,8 +36,9 @@ ds = ds.shuffle(100)
 for i, episode in enumerate(ds.take(5)):
     images = []
     for step in episode['steps']:
-        images.append(step['observation']['image'].numpy())
-    image_strip = np.concatenate(images[::4], axis=1)
+        images.append(step['observation']['exterior_image_1_left'].numpy())
+    
+    image_strip = np.concatenate(images[::1000], axis=1)
     caption = step['language_instruction'].numpy().decode() + ' (temp. downsampled 4x)'
 
     if render_wandb:
@@ -52,7 +53,7 @@ actions, states = [], []
 for episode in tqdm.tqdm(ds.take(500)):
     for step in episode['steps']:
         actions.append(step['action'].numpy())
-        states.append(step['observation']['state'].numpy())
+        states.append(step['observation']['cartesian_position'].numpy())
 actions = np.array(actions)
 states = np.array(states)
 action_mean = actions.mean(0)
