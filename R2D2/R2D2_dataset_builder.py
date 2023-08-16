@@ -416,37 +416,37 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                         'exterior_image_1_left': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Exterior camera 1 left viewpoint',
                         ),
                         'exterior_image_1_right': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Exterior camera 1 right viewpoint'
                         ),
                         'exterior_image_2_left': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Exterior camera 2 left viewpoint'
                         ),
                         'exterior_image_2_right': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Exterior camera 2 right viewpoint'
                         ),
                         'wrist_image_left': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Wrist camera RGB left viewpoint',
                         ),
                         'wrist_image_right': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
-                            #encoding_format='jpeg',
+                            encoding_format='jpeg',
                             doc='Wrist camera RGB right viewpoint'
                         ),
                         'cartesian_position': tfds.features.Tensor(
@@ -633,15 +633,16 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                 os.path.exists(p + '/recordings/MP4')]
 
+        episode_paths = episode_paths[:3]
         # for smallish datasets, use single-thread parsing
-        #for sample in episode_paths:
-        #    yield _parse_example(sample)
+        for sample in episode_paths:
+            yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        beam = tfds.core.lazy_imports.apache_beam
-        return (
-                 beam.Create(episode_paths)
-                 | beam.Map(_parse_example)
-        )
+        #beam = tfds.core.lazy_imports.apache_beam
+        #return (
+        #         beam.Create(episode_paths)
+       #          | beam.Map(_parse_example)
+        #)
 
 
