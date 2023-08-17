@@ -33,13 +33,15 @@ Key = Union[str, int]
 Example = Dict[str, Any]
 KeyExample = Tuple[Key, Example]
 
-N_WORKERS = 10                      # number of parallel workers for data conversion
-MAX_PATHS_IN_MEMORY = 50            # number of paths converted & stored in memory before writing to disk
+N_WORKERS = 40 # number of parallel workers for data conversion
+MAX_PATHS_IN_MEMORY = 400            # number of paths converted & stored in memory before writing to disk
                                     # -> the higher the faster / more parallel conversion, adjust based on avilable RAM
                                     # note that one path may yield multiple episodes and adjust accordingly
 
 
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
+language_instruction = 'Execute a task.'
+language_embedding = _embed([language_instruction])[0].numpy()
 
 
 camera_type_dict = {
@@ -434,58 +436,68 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
         h5_filepath = os.path.join(episode_path, 'trajectory.h5')
         recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
 
-        traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        try:
+            traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        except:
+            print(f"Skipping trajectory {episode_path}.")
+            return None
         data = traj[::FRAMESKIP]
 
-        assert all(t.keys() == data[0].keys() for t in data)
-        for t in range(len(data)):
-            for key in data[0]['observation']['image'].keys():
-                # import matplotlib.pyplot as plt
-                # plt.imshow(data[t]['observation']['image'][key])
-                # plt.savefig('out.png')
-                # import pdb; pdb.set_trace()
-                data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key],
+        try:
+            assert all(t.keys() == data[0].keys() for t in data)
+            for t in range(len(data)):
+                for key in data[0]['observation']['image'].keys():
+                    # import matplotlib.pyplot as plt
+                    # plt.imshow(data[t]['observation']['image'][key])
+                    # plt.savefig('out.png')
+                    # import pdb; pdb.set_trace()
+                    data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key],
                                                                           IMAGE_SIZE)
-                # plt.imshow(data[t]['observation']['image'][key])
-                # plt.savefig('out.png')
+                    # plt.imshow(data[t]['observation']['image'][key])
+                    # plt.savefig('out.png')
 
-        # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-        episode = []
-        for i, step in enumerate(data):
-            obs = step['observation']
-            action = step['action']
-            language_instruction = 'Execute a task.'
-            # compute Kona language embedding
-            language_embedding = _embed([language_instruction])[0].numpy()
-            episode.append({
-                'observation': {
-                    'exterior_image_1_left': obs['image']['29838012_left'],
-                    'exterior_image_1_right': obs['image']['29838012_right'],
-                    'exterior_image_2_left': obs['image']['23404442_left'],
-                    'exterior_image_2_right': obs['image']['23404442_right'],
-                    'wrist_image_left': obs['image']['19824535_left'],
-                    'wrist_image_right': obs['image']['19824535_right'],
-                    'cartesian_position': obs['robot_state']['cartesian_position'],
-                    'joint_position': obs['robot_state']['joint_positions'],
-                    'gripper_position': np.array([obs['robot_state']['gripper_position']]),
-                },
-                'action_dict': {
-                    'cartesian_position': action['cartesian_position'],
-                    'cartesian_velocity': action['cartesian_velocity'],
-                    'gripper_position': np.array([action['gripper_position']]),
-                    'gripper_velocity': np.array([action['gripper_velocity']]),
-                    'joint_position': action['joint_position'],
-                    'joint_velocity': action['joint_velocity'],
-                },
-                'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
-                'discount': 1.0,
-                'reward': float(i == (len(data) - 1)),
-                'is_first': i == 0,
-                'is_last': i == (len(data) - 1),
-                'is_terminal': i == (len(data) - 1),
-                'language_instruction': language_instruction,
-                'language_embedding': language_embedding,
-            })
+            # assemble episode --> here we're assuming demos so we set reward to 1 at the end
+            episode = []
+        
+            for i, step in enumerate(data):
+                obs = step['observation']
+                action = step['action']
+                #language_instruction = 'Execute a task.'
+                # compute Kona language embedding
+                #language_embedding = _embed([language_instruction])[0].numpy()
+                episode.append({
+                    'observation': {
+                        'exterior_image_1_left': obs['image']['29838012_left'],
+                        'exterior_image_1_right': obs['image']['29838012_right'],
+                        'exterior_image_2_left': obs['image']['23404442_left'],
+                        'exterior_image_2_right': obs['image']['23404442_right'],
+                        'wrist_image_left': obs['image']['19824535_left'],
+                        'wrist_image_right': obs['image']['19824535_right'],
+                        'cartesian_position': obs['robot_state']['cartesian_position'],
+                        'joint_position': obs['robot_state']['joint_positions'],
+                        'gripper_position': np.array([obs['robot_state']['gripper_position']]),
+                    },
+                    'action_dict': {
+                        'cartesian_position': action['cartesian_position'],
+                        'cartesian_velocity': action['cartesian_velocity'],
+                        'gripper_position': np.array([action['gripper_position']]),
+                        'gripper_velocity': np.array([action['gripper_velocity']]),
+                        'joint_position': action['joint_position'],
+                        'joint_velocity': action['joint_velocity'],
+                    },
+                    'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
+                    'discount': 1.0,
+                    'reward': float(i == (len(data) - 1)),
+                    'is_first': i == 0,
+                    'is_last': i == (len(data) - 1),
+                    'is_terminal': i == (len(data) - 1),
+                    'language_instruction': language_instruction,
+                    'language_embedding': language_embedding,
+                })
+        except:
+            print(f"Skipping trajectory {episode_path}.")
+            return None
+
         # create output data sample
         sample = {
             'steps': episode,
@@ -652,9 +664,15 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
     def _split_paths(self):
         """Define data splits."""
         # create list of all examples
-        episode_paths = crawler('/iris/u/jyang27/2023-02-28')
+        print("Crawling all episode paths...")
+        #episode_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/recordings/MP4')
+        #trajectory_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/trajectory.h5')
+        #episode_paths = list(set([p[-15:] for p in recording_paths]) & set([p[-14:] for p in trajectory_paths]))
+        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_pen')
+        print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4')]
+        print(f"Found {len(episode_paths)} episodes!")
         return {
             'train': episode_paths,
         }
@@ -740,7 +758,7 @@ class _SplitInfoFuture:
 def parse_examples_from_generator(paths, split_name, total_num_examples, features, serializer):
     generator = _generate_examples(paths)
     outputs = []
-    for key, example in utils.tqdm(
+    for sample in utils.tqdm(
             generator,
             desc=f'Generating {split_name} examples...',
             unit=' examples',
@@ -748,6 +766,8 @@ def parse_examples_from_generator(paths, split_name, total_num_examples, feature
             leave=False,
             mininterval=1.0,
     ):
+        if sample is None: continue
+        key, example = sample
         try:
             example = features.encode_example(example)
         except Exception as e:  # pylint: disable=broad-except
