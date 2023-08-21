@@ -34,7 +34,7 @@ Example = Dict[str, Any]
 KeyExample = Tuple[Key, Example]
 
 N_WORKERS = 40 # number of parallel workers for data conversion
-MAX_PATHS_IN_MEMORY = 400            # number of paths converted & stored in memory before writing to disk
+MAX_PATHS_IN_MEMORY = 600            # number of paths converted & stored in memory before writing to disk
                                     # -> the higher the faster / more parallel conversion, adjust based on avilable RAM
                                     # note that one path may yield multiple episodes and adjust accordingly
 
@@ -75,13 +75,6 @@ class MP4Reader:
         self._mp4_reader = cv2.VideoCapture(filepath)
         if not self._mp4_reader.isOpened():
             raise RuntimeError("Corrupted MP4 File")
-
-        # Load Recording Timestamps #
-        timestamp_filepath = filepath[:-4] + "_timestamps.json"
-        if not os.path.isfile(timestamp_filepath):
-            self._recording_timestamps = []
-        with open(timestamp_filepath, "r") as jsonFile:
-            self._recording_timestamps = json.load(jsonFile)
 
     def set_reading_parameters(
         self,
@@ -128,28 +121,18 @@ class MP4Reader:
         return self.resize_func(frame, self.resolution)
         # return cv2.resize(frame, self.resolution)#, interpolation=cv2.INTER_AREA)
 
-    def read_camera(self, ignore_data=False, correct_timestamp=None, return_timestamp=False):
+    def read_camera(self, ignore_data=False, correct_timestamp=None):
         # Skip if Read Unnecesary #
         if self.skip_reading:
             return {}
 
         # Read Camera #
         success, frame = self._mp4_reader.read()
-        try:
-            received_time = self._recording_timestamps[self._index]
-        except IndexError:
-            received_time = None
 
         self._index += 1
         if not success:
             return None
         if ignore_data:
-            return None
-
-        # Check Image Timestamp #
-        timestamps_given = (received_time is not None) and (correct_timestamp is not None)
-        if timestamps_given and (correct_timestamp != received_time):
-            print("Timestamps did not match...")
             return None
 
         # Return Data #
@@ -164,8 +147,6 @@ class MP4Reader:
                 self.serial_number + "_right": self._process_frame(frame[:, single_width:, :]),
             }
 
-        if return_timestamp:
-            return data_dict, received_time
         return data_dict
 
     def disable_camera(self):
@@ -465,14 +446,18 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                 #language_instruction = 'Execute a task.'
                 # compute Kona language embedding
                 #language_embedding = _embed([language_instruction])[0].numpy()
+                camera_type_dict = obs['camera_type']
+                wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
+                exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
+
                 episode.append({
                     'observation': {
-                        'exterior_image_1_left': obs['image']['29838012_left'],
-                        'exterior_image_1_right': obs['image']['29838012_right'],
-                        'exterior_image_2_left': obs['image']['23404442_left'],
-                        'exterior_image_2_right': obs['image']['23404442_right'],
-                        'wrist_image_left': obs['image']['19824535_left'],
-                        'wrist_image_right': obs['image']['19824535_right'],
+                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'],
+                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'],
+                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'],
+                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'],
+                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'],
+                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
                         'joint_position': obs['robot_state']['joint_positions'],
                         'gripper_position': np.array([obs['robot_state']['gripper_position']]),
@@ -487,7 +472,7 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                     },
                     'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
                     'discount': 1.0,
-                    'reward': float(i == (len(data) - 1)),
+                    'reward': float((i == (len(data) - 1) and 'success' in episode_path)),
                     'is_first': i == 0,
                     'is_last': i == (len(data) - 1),
                     'is_terminal': i == (len(data) - 1),
@@ -668,7 +653,7 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         #episode_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/recordings/MP4')
         #trajectory_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/trajectory.h5')
         #episode_paths = list(set([p[-15:] for p in recording_paths]) & set([p[-14:] for p in trajectory_paths]))
-        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_pen')
+        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_full_0819')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4')]
