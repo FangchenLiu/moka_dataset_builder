@@ -1,4 +1,5 @@
 import argparse
+import r2_d2
 import tqdm
 import importlib
 import os
@@ -9,7 +10,7 @@ import matplotlib.pyplot as plt
 import wandb
 import tensorflow as tf
 
-WANDB_ENTITY = None
+WANDB_ENTITY = 'clvr'
 WANDB_PROJECT = 'vis_rlds'
 
 
@@ -29,24 +30,30 @@ else:
 dataset_name = args.dataset_name
 print(f"Visualizing data from dataset: {dataset_name}")
 module = importlib.import_module(dataset_name)
-ds = tfds.load(dataset_name, split='train')
+ds = tfds.load(dataset_name, data_dir='/nfs/kun2/datasets/r2d2/tfds/', split='train')
+ds = ds.filter(lambda episode: tf.strings.regex_full_match(episode['episode_metadata']['recording_folderpath'], '.*RAIL.*'))
 ds = ds.shuffle(100)
 
 # visualize episodes
-for i, episode in enumerate(ds.take(5)):
+for i, episode in enumerate(ds.take(10)):
     images = []
+    images_1 = []
     for step in episode['steps']:
         images.append(step['observation']['exterior_image_1_left'].numpy())
+        images_1.append(step['observation']['exterior_image_1_right'].numpy())
     
-    image_strip = np.concatenate(images[::1000], axis=1)
+    image_strip = np.concatenate(images[-20:][::4], axis=1)
     caption = step['language_instruction'].numpy().decode() + ' (temp. downsampled 4x)'
 
     if render_wandb:
-        wandb.log({f'image_{i}': wandb.Image(image_strip, caption=caption)})
+        #wandb.log({f'image_{i}': wandb.Image(image_strip, caption=caption)})
+        wandb.log({f'last_{i}': wandb.Image(images[-1])})
+        wandb.log({f'last_{i}_2': wandb.Image(images_1[-1])})
     else:
         plt.figure()
         plt.imshow(image_strip)
         plt.title(caption)
+exit(0)
 
 # visualize action and state statistics
 actions, states = [], []

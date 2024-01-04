@@ -40,8 +40,26 @@ MAX_PATHS_IN_MEMORY = 600            # number of paths converted & stored in mem
 
 
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
-language_instruction = 'Execute a task.'
+language_instruction = ''
 language_embedding = _embed([language_instruction])[0].numpy()
+
+with open("/nfs/kun2/datasets/r2d2/r2d2-data-full/aggregated-annotations.json", "r") as F:
+    language_annotations = json.load(F)
+
+import tqdm
+language_annotation_embeddings = dict()
+for key in []: #tqdm.tqdm(language_annotations.keys()):
+    annot = language_annotations[key]
+    embed_1, embed_2, embed_3 = tuple(_embed([
+        annot.get("language_instruction1", ''),
+        annot.get("language_instruction2", ''),
+        annot.get("language_instruction3", '')
+    ]).numpy())
+    language_annotation_embeddings[key] = dict(
+        language_embedding=embed_1,
+        language_embedding_2=embed_2,
+        language_embedding_3=embed_3,
+    )
 
 
 camera_type_dict = {
@@ -187,7 +205,12 @@ class RecordedMultiCameraWrapper:
         #random.shuffle(all_cam_ids)
 
         for cam_id in all_cam_ids:
-            cam_type = camera_type_dict[cam_id]
+            if 'stereo' in cam_id: continue
+            try:
+                cam_type = camera_type_dict[cam_id]
+            except:
+                print(f"{self.camera_dict} -- {camera_type_dict}")
+                raise ValueError
             curr_cam_kwargs = self.camera_kwargs.get(cam_type, {})
             self.camera_dict[cam_id].set_reading_parameters(**curr_cam_kwargs)
 
@@ -325,6 +348,7 @@ def crawler(dirname, filter_func=None):
 
     all_folderpaths = []
     for child_dirname in subfolders:
+        #if 'ILIAD' not in child_dirname: continue
         child_paths = crawler(child_dirname, filter_func=filter_func)
         all_folderpaths.extend(child_paths)
 
@@ -406,6 +430,7 @@ def load_trajectory(
 
 
 def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
+
     def _resize_and_encode(image, size):
         image = Image.fromarray(image)
         return np.array(image.resize(size, resample=Image.BICUBIC))
@@ -417,14 +442,48 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
         h5_filepath = os.path.join(episode_path, 'trajectory.h5')
         recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
 
-        try:
+        if True: #try:
             traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-        except:
-            print(f"Skipping trajectory {episode_path}.")
-            return None
+        #except:
+        #    print(f"Skipping trajectory {episode_path}.")
+        #    return None
         data = traj[::FRAMESKIP]
 
-        try:
+        # get language instructions if available
+        if False: #try:
+            metadata_file = glob.glob(episode_path + "/metadata_*.json")[0]
+            traj_id = metadata_file[:-5].split('/')[-1].split('_')[-1]
+            if 'pilot/' + traj_id + '.mp4' in language_annotations:
+                lang_1 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction1', '')
+                lang_2 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction2', '')
+                lang_3 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction3', '')
+                lang_e_1 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding']
+                lang_e_2 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding_2']
+                lang_e_3 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding_3']
+            else:
+                lang_1 = ''
+                lang_2 = ''
+                lang_3 = ''
+                lang_e_1 = language_embedding
+                lang_e_2 = language_embedding
+                lang_e_3 = language_embedding
+        #except:
+        #    print(f"Skipping trajectory {episode_path}.")
+        #    return None
+
+        if "food_bowl_in_out" in episode_path:
+            lang_1 = lang_2 = lang_3 = "put the food in the bowl"
+        elif "food_microwave_in_out" in episode_path:
+            lang_1 = lang_2 = lang_3 = "put the food in the microwave"
+        elif "microwave_open_close" in episode_path:
+            lang_1 = lang_2 = lang_3 = "open and close the microwave"
+        elif "press_toaster" in episode_path:
+            lang_1 = lang_2 = lang_3 = "press the toaster"
+        elif "wipe_microwave" in episode_path:
+            lang_1 = lang_2 = lang_3 = "wipe the microwave"
+        lang_e_1 = lang_e_2 = lang_e_3 = language_embedding
+
+        if True: #try:
             assert all(t.keys() == data[0].keys() for t in data)
             for t in range(len(data)):
                 for key in data[0]['observation']['image'].keys():
@@ -452,12 +511,12 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
 
                 episode.append({
                     'observation': {
-                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'],
-                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'],
-                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'],
-                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'],
-                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'],
-                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'],
+                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'][..., ::-1],
+                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'][..., ::-1],
+                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'][..., ::-1],
+                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'][..., ::-1],
+                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'][..., ::-1],
+                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'][..., ::-1],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
                         'joint_position': obs['robot_state']['joint_positions'],
                         'gripper_position': np.array([obs['robot_state']['gripper_position']]),
@@ -476,12 +535,16 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                     'is_first': i == 0,
                     'is_last': i == (len(data) - 1),
                     'is_terminal': i == (len(data) - 1),
-                    'language_instruction': language_instruction,
-                    'language_embedding': language_embedding,
+                    'language_instruction': lang_1,
+                    'language_instruction_2': lang_2,
+                    'language_instruction_3': lang_3,
+                    'language_embedding': lang_e_1,
+                    'language_embedding_2': lang_e_2,
+                    'language_embedding_3': lang_e_3,
                 })
-        except:
-            print(f"Skipping trajectory {episode_path}.")
-            return None
+        #except:
+        #    print(f"Skipping trajectory {episode_path}.")
+        #    return None
 
         # create output data sample
         sample = {
@@ -629,11 +692,27 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                     'language_instruction': tfds.features.Text(
                         doc='Language Instruction.'
                     ),
+                    'language_instruction_2': tfds.features.Text(
+                        doc='Alternative Language Instruction.'
+                    ),
+                    'language_instruction_3': tfds.features.Text(
+                        doc='Alternative Language Instruction.'
+                    ),
                     'language_embedding': tfds.features.Tensor(
                         shape=(512,),
                         dtype=np.float32,
                         doc='Kona language embedding. '
                             'See https://tfhub.dev/google/universal-sentence-encoder-large/5'
+                    ),
+                    'language_embedding_2': tfds.features.Tensor(
+                        shape=(512,),
+                        dtype=np.float32,
+                        doc='Alternative Kona language embedding.'
+                    ),
+                    'language_embedding_3': tfds.features.Tensor(
+                        shape=(512,),
+                        dtype=np.float32,
+                        doc='Alternative Kona language embedding.'
                     ),
                 }),
                 'episode_metadata': tfds.features.FeaturesDict({
@@ -653,7 +732,8 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         #episode_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/recordings/MP4')
         #trajectory_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/trajectory.h5')
         #episode_paths = list(set([p[-15:] for p in recording_paths]) & set([p[-14:] for p in trajectory_paths]))
-        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_full_0819')
+        #episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2-data-full')
+        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_iris_finetune')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4')]
