@@ -9,6 +9,7 @@ import os
 import cv2
 import h5py
 import json
+import tqdm
 import io
 from collections import defaultdict
 import random
@@ -41,20 +42,31 @@ MAX_PATHS_IN_MEMORY = 600            # number of paths converted & stored in mem
 
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
 language_instruction = ''
-language_embedding = _embed([language_instruction])[0].numpy()
+dummy_language_embedding = _embed([language_instruction])[0].numpy()
 
 with open("/nfs/kun2/datasets/r2d2/r2d2-data-full/aggregated-annotations.json", "r") as F:
     language_annotations = json.load(F)
 
-import tqdm
+# remove pilot vs batch etc leading word in key
+cleaned_language_annotations = {}
+for key in tqdm.tqdm(language_annotations.keys()):
+    cleaned_language_annotations[key.split('/')[-1]] = language_annotations[key]
+
+
+def get_language_annotations(key):
+    annot = cleaned_language_annotations[key]
+    return (
+        annot.get("language_instruction1", '') + annot.get("language_instruction1_label", ''),
+        annot.get("language_instruction2", '') + annot.get("language_instruction2_label_1", ''),
+        annot.get("language_instruction3", '') + annot.get("language_instruction2_label_2", '')
+    )
+
+
+# pre-compute all Kona embeddings
 language_annotation_embeddings = dict()
-for key in []: #tqdm.tqdm(language_annotations.keys()):
+for key in tqdm.tqdm(cleaned_language_annotations.keys()):
     annot = language_annotations[key]
-    embed_1, embed_2, embed_3 = tuple(_embed([
-        annot.get("language_instruction1", ''),
-        annot.get("language_instruction2", ''),
-        annot.get("language_instruction3", '')
-    ]).numpy())
+    embed_1, embed_2, embed_3 = tuple(_embed(get_language_annotations(key)).numpy())
     language_annotation_embeddings[key] = dict(
         language_embedding=embed_1,
         language_embedding_2=embed_2,
@@ -156,7 +168,7 @@ class MP4Reader:
         # Return Data #
         data_dict = {}
 
-        if self.concatenate_images:
+        if self.concatenate_images or 'stereo' not in self.serial_number:
             data_dict["image"] = {self.serial_number: self._process_frame(frame)}
         else:
             single_width = frame.shape[1] // 2
@@ -442,59 +454,52 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
         h5_filepath = os.path.join(episode_path, 'trajectory.h5')
         recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
 
-        if True: #try:
+        try:
             traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-        #except:
-        #    print(f"Skipping trajectory {episode_path}.")
-        #    return None
+        except:
+           print(f"Skipping trajectory {episode_path}.")
+           return None
         data = traj[::FRAMESKIP]
 
         # get language instructions if available
-        if False: #try:
+        try:
             metadata_file = glob.glob(episode_path + "/metadata_*.json")[0]
-            traj_id = metadata_file[:-5].split('/')[-1].split('_')[-1]
-            if 'pilot/' + traj_id + '.mp4' in language_annotations:
-                lang_1 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction1', '')
-                lang_2 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction2', '')
-                lang_3 = language_annotations['pilot/' + traj_id + '.mp4'].get('language_instruction3', '')
-                lang_e_1 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding']
-                lang_e_2 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding_2']
-                lang_e_3 = language_annotation_embeddings['pilot/' + traj_id + '.mp4']['language_embedding_3']
+            traj_id = metadata_file[:-5].split('/')[-1].split('_')[-1] + '.mp4'
+            if traj_id in cleaned_language_annotations:
+                lang_1, lang_2, lang_3 = get_language_annotations(traj_id)
+                lang_e_1 = language_annotation_embeddings[traj_id]['language_embedding']
+                lang_e_2 = language_annotation_embeddings[traj_id]['language_embedding_2']
+                lang_e_3 = language_annotation_embeddings[traj_id]['language_embedding_3']
             else:
                 lang_1 = ''
                 lang_2 = ''
                 lang_3 = ''
-                lang_e_1 = language_embedding
-                lang_e_2 = language_embedding
-                lang_e_3 = language_embedding
-        #except:
-        #    print(f"Skipping trajectory {episode_path}.")
-        #    return None
+                lang_e_1 = dummy_language_embedding
+                lang_e_2 = dummy_language_embedding
+                lang_e_3 = dummy_language_embedding
+        except:
+           print(f"Skipping trajectory {episode_path}.")
+           return None
 
-        if "food_bowl_in_out" in episode_path:
-            lang_1 = lang_2 = lang_3 = "put the food in the bowl"
-        elif "food_microwave_in_out" in episode_path:
-            lang_1 = lang_2 = lang_3 = "put the food in the microwave"
-        elif "microwave_open_close" in episode_path:
-            lang_1 = lang_2 = lang_3 = "open and close the microwave"
-        elif "press_toaster" in episode_path:
-            lang_1 = lang_2 = lang_3 = "press the toaster"
-        elif "wipe_microwave" in episode_path:
-            lang_1 = lang_2 = lang_3 = "wipe the microwave"
-        lang_e_1 = lang_e_2 = lang_e_3 = language_embedding
+        # if "food_bowl_in_out" in episode_path:
+        #     lang_1 = lang_2 = lang_3 = "put the food in the bowl"
+        # elif "food_microwave_in_out" in episode_path:
+        #     lang_1 = lang_2 = lang_3 = "put the food in the microwave"
+        # elif "microwave_open_close" in episode_path:
+        #     lang_1 = lang_2 = lang_3 = "open and close the microwave"
+        # elif "press_toaster" in episode_path:
+        #     lang_1 = lang_2 = lang_3 = "press the toaster"
+        # elif "wipe_microwave" in episode_path:
+        #     lang_1 = lang_2 = lang_3 = "wipe the microwave"
+        # lang_e_1 = lang_e_2 = lang_e_3 = dummy_language_embedding
 
-        if True: #try:
+        try:
             assert all(t.keys() == data[0].keys() for t in data)
             for t in range(len(data)):
                 for key in data[0]['observation']['image'].keys():
-                    # import matplotlib.pyplot as plt
-                    # plt.imshow(data[t]['observation']['image'][key])
-                    # plt.savefig('out.png')
-                    # import pdb; pdb.set_trace()
-                    data[t]['observation']['image'][key] = _resize_and_encode(data[t]['observation']['image'][key],
-                                                                          IMAGE_SIZE)
-                    # plt.imshow(data[t]['observation']['image'][key])
-                    # plt.savefig('out.png')
+                    data[t]['observation']['image'][key] = _resize_and_encode(
+                        data[t]['observation']['image'][key], IMAGE_SIZE
+                    )
 
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
             episode = []
@@ -502,21 +507,18 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
             for i, step in enumerate(data):
                 obs = step['observation']
                 action = step['action']
-                #language_instruction = 'Execute a task.'
-                # compute Kona language embedding
-                #language_embedding = _embed([language_instruction])[0].numpy()
                 camera_type_dict = obs['camera_type']
                 wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
                 exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
 
                 episode.append({
                     'observation': {
-                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}_left'][..., ::-1],
-                        'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'][..., ::-1],
-                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}_left'][..., ::-1],
-                        'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'][..., ::-1],
-                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}_left'][..., ::-1],
-                        'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'][..., ::-1],
+                        'exterior_image_1_left': obs['image'][f'{exterior_ids[0]}'][..., ::-1],
+                        # 'exterior_image_1_right': obs['image'][f'{exterior_ids[0]}_right'][..., ::-1],
+                        'exterior_image_2_left': obs['image'][f'{exterior_ids[1]}'][..., ::-1],
+                        # 'exterior_image_2_right': obs['image'][f'{exterior_ids[1]}_right'][..., ::-1],
+                        'wrist_image_left': obs['image'][f'{wrist_ids[0]}'][..., ::-1],
+                        # 'wrist_image_right': obs['image'][f'{wrist_ids[0]}_right'][..., ::-1],
                         'cartesian_position': obs['robot_state']['cartesian_position'],
                         'joint_position': obs['robot_state']['joint_positions'],
                         'gripper_position': np.array([obs['robot_state']['gripper_position']]),
@@ -542,9 +544,9 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
                     'language_embedding_2': lang_e_2,
                     'language_embedding_3': lang_e_3,
                 })
-        #except:
-        #    print(f"Skipping trajectory {episode_path}.")
-        #    return None
+        except:
+           print(f"Skipping trajectory {episode_path}.")
+           return None
 
         # create output data sample
         sample = {
@@ -585,36 +587,36 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
                             encoding_format='jpeg',
                             doc='Exterior camera 1 left viewpoint',
                         ),
-                        'exterior_image_1_right': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Exterior camera 1 right viewpoint'
-                        ),
+                        # 'exterior_image_1_right': tfds.features.Image(
+                        #     shape=(180, 320, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Exterior camera 1 right viewpoint'
+                        # ),
                         'exterior_image_2_left': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
                             encoding_format='jpeg',
                             doc='Exterior camera 2 left viewpoint'
                         ),
-                        'exterior_image_2_right': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Exterior camera 2 right viewpoint'
-                        ),
+                        # 'exterior_image_2_right': tfds.features.Image(
+                        #     shape=(180, 320, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Exterior camera 2 right viewpoint'
+                        # ),
                         'wrist_image_left': tfds.features.Image(
                             shape=(180, 320, 3),
                             dtype=np.uint8,
                             encoding_format='jpeg',
                             doc='Wrist camera RGB left viewpoint',
                         ),
-                        'wrist_image_right': tfds.features.Image(
-                            shape=(180, 320, 3),
-                            dtype=np.uint8,
-                            encoding_format='jpeg',
-                            doc='Wrist camera RGB right viewpoint'
-                        ),
+                        # 'wrist_image_right': tfds.features.Image(
+                        #     shape=(180, 320, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='jpeg',
+                        #     doc='Wrist camera RGB right viewpoint'
+                        # ),
                         'cartesian_position': tfds.features.Tensor(
                             shape=(6,),
                             dtype=np.float64,
@@ -729,11 +731,8 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         """Define data splits."""
         # create list of all examples
         print("Crawling all episode paths...")
-        #episode_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/recordings/MP4')
-        #trajectory_paths = glob.glob('/nfs/kun2/datasets/r2d2/r2d2_pen/*/*/trajectory.h5')
-        #episode_paths = list(set([p[-15:] for p in recording_paths]) & set([p[-14:] for p in trajectory_paths]))
-        #episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2-data-full')
-        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_iris_finetune')
+        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2-data-full')
+        # episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_iris_finetune')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4')]
@@ -897,8 +896,12 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
             print("Writing conversion results...")
             for result in itertools.chain(*results):
                 key, serialized_example = result
-                writer._shuffler.add(key, serialized_example)
-                writer._num_examples += 1
+                try:
+                    writer._shuffler.add(key, serialized_example)
+                    writer._num_examples += 1
+                except:
+                    print(f"Failed to write episode {key}")
+                    continue
         pool.close()
 
         print("Finishing split conversion...")
