@@ -24,10 +24,11 @@ from tensorflow_datasets.core import split_builder as split_builder_lib
 from tensorflow_datasets.core import naming
 from tensorflow_datasets.core import splits as splits_lib
 from tensorflow_datasets.core import utils
-from tensorflow_datasets.core import writer as writer_lib
+# from tensorflow_datasets.core import writer as writer_lib
 from tensorflow_datasets.core import example_serializer
 from tensorflow_datasets.core import dataset_builder
 from tensorflow_datasets.core import file_adapters
+from r2_d2.resume_writer import ResumeWriter
 
 Key = Union[str, int]
 # The nested example dict passed to `features.encode_example`
@@ -38,6 +39,10 @@ N_WORKERS = 40 # number of parallel workers for data conversion
 MAX_PATHS_IN_MEMORY = 600            # number of paths converted & stored in memory before writing to disk
                                     # -> the higher the faster / more parallel conversion, adjust based on avilable RAM
                                     # note that one path may yield multiple episodes and adjust accordingly
+
+# optionally provide info to resume conversion from a previous run
+RESUME_DIR = "/nfs/kun2/datasets/r2d2/tfds/r2_d2/1.0.0.incomplete0DSARA"
+START_CHUNK = 81
 
 
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
@@ -869,7 +874,7 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
         """
         total_num_examples = None
         serialized_info = self._features.get_serialized_info()
-        writer = writer_lib.Writer(
+        writer = ResumeWriter(
             serializer=example_serializer.ExampleSerializer(serialized_info),
             filename_template=filename_template,
             hash_salt=split_name,
@@ -883,7 +888,8 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
         path_lists = chunk_max(paths, N_WORKERS, MAX_PATHS_IN_MEMORY)  # generate N file lists
         print(f"Generating with {N_WORKERS} workers!")
         pool = Pool(processes=N_WORKERS)
-        for i, paths in enumerate(path_lists):
+        for i in range(START_CHUNK, len(path_lists)):
+            paths = path_lists[i]
             print(f"Processing chunk {i + 1} of {len(path_lists)}.")
             results = pool.map(
                 partial(
