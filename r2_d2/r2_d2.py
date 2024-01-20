@@ -44,7 +44,7 @@ _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
 language_instruction = ''
 dummy_language_embedding = _embed([language_instruction])[0].numpy()
 
-with open("/nfs/kun2/datasets/r2d2/r2d2-data-full/aggregated-annotations.json", "r") as F:
+with open("/nfs/kun2/datasets/r2d2/r2d2-data-full/aggregated-annotations-r2d2.json", "r") as F:
     language_annotations = json.load(F)
 
 # remove pilot vs batch etc leading word in key
@@ -65,7 +65,7 @@ def get_language_annotations(key):
 # pre-compute all Kona embeddings
 language_annotation_embeddings = dict()
 for key in tqdm.tqdm(cleaned_language_annotations.keys()):
-    annot = language_annotations[key]
+    annot = cleaned_language_annotations[key]
     embed_1, embed_2, embed_3 = tuple(_embed(get_language_annotations(key)).numpy())
     language_annotation_embeddings[key] = dict(
         language_embedding=embed_1,
@@ -190,7 +190,7 @@ class RecordedMultiCameraWrapper:
         self.camera_kwargs = camera_kwargs
 
         # Open Camera Readers #
-        svo_filepaths = glob.glob(recording_folderpath + "/*.svo")
+        svo_filepaths = [] #glob.glob(recording_folderpath + "/*.svo")
         mp4_filepaths = glob.glob(recording_folderpath + "/*.mp4")
         all_filepaths = svo_filepaths + mp4_filepaths
 
@@ -737,6 +737,9 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4')]
         print(f"Found {len(episode_paths)} episodes!")
+        #from collections import Counter
+        #cc = Counter(episode_paths)
+        #breakpoint()
         return {
             'train': episode_paths,
         }
