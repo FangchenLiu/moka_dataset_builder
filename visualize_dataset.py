@@ -10,13 +10,8 @@ import matplotlib.pyplot as plt
 import wandb
 import tensorflow as tf
 
-WANDB_ENTITY = 'clvr'
+WANDB_ENTITY = 'fliu'
 WANDB_PROJECT = 'vis_rlds'
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('dataset_name', help='name of the dataset to visualize')
-args = parser.parse_args()
 
 if WANDB_ENTITY is not None:
     render_wandb = True
@@ -27,28 +22,31 @@ else:
 
 
 # create TF dataset
-dataset_name = args.dataset_name
+dataset_name = 'cvp'
 print(f"Visualizing data from dataset: {dataset_name}")
 module = importlib.import_module(dataset_name)
-ds = tfds.load(dataset_name, data_dir='/nfs/kun2/datasets/r2d2/tfds/', split='train')
-ds = ds.filter(lambda episode: tf.strings.regex_full_match(episode['episode_metadata']['recording_folderpath'], '.*RAIL.*'))
-ds = ds.shuffle(100)
+ds = tfds.load(dataset_name, data_dir='/hdd/data', split='train')
+# ds = ds.filter(lambda episode: tf.strings.regex_full_match(episode['episode_metadata']['recording_folderpath'], '.*RAIL.*'))
+# ds = ds.shuffle(100)
 
 # visualize episodes
-for i, episode in enumerate(ds.take(10)):
+for i, episode in enumerate(ds.take(50)):
     images = []
     images_1 = []
+    images_2 = []
     for step in episode['steps']:
-        images.append(step['observation']['exterior_image_1_left'].numpy())
-        images_1.append(step['observation']['exterior_image_1_right'].numpy())
+        images.append(step['observation']['image_0'].numpy())
+        images_1.append(step['observation']['image_1'].numpy())
+        images_2.append(step['observation']['image_2'].numpy())
     
     image_strip = np.concatenate(images[-20:][::4], axis=1)
     caption = step['language_instruction'].numpy().decode() + ' (temp. downsampled 4x)'
 
     if render_wandb:
         #wandb.log({f'image_{i}': wandb.Image(image_strip, caption=caption)})
-        wandb.log({f'last_{i}': wandb.Image(images[-1])})
-        wandb.log({f'last_{i}_2': wandb.Image(images_1[-1])})
+        # wandb.log({f'last_{i}_1': wandb.Image(images[-1])})
+        # wandb.log({f'last_{i}_2': wandb.Image(images_1[-1])})
+        wandb.log({f'last_{i}_wrist': wandb.Image(images_2[-1])})
     else:
         plt.figure()
         plt.imshow(image_strip)
