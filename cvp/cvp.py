@@ -41,7 +41,6 @@ from typing import Optional
 from tensorflow_datasets.core.writer import Writer
 from tensorflow_datasets.core.shuffle import Shuffler, HKEY_SIZE_BYTES, _read_hkey
 
-
 class ResumeWriter(Writer):
   """Shuffles and writes Examples to sharded TFRecord files.
 
@@ -117,8 +116,8 @@ Key = Union[str, int]
 Example = Dict[str, Any]
 KeyExample = Tuple[Key, Example]
 
-N_WORKERS = 1 # number of parallel workers for data conversion
-MAX_PATHS_IN_MEMORY = 1            # number of paths converted & stored in memory before writing to disk
+N_WORKERS = 20 # number of parallel workers for data conversion
+MAX_PATHS_IN_MEMORY = 5            # number of paths converted & stored in memory before writing to disk
                                     # -> the higher the faster / more parallel conversion, adjust based on avilable RAM
                                     # note that one path may yield multiple episodes and adjust accordingly
 
@@ -513,94 +512,94 @@ def load_trajectory(
     return timestep_list
 
 
-# def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
-#
-#     def _resize_and_encode(image, size):
-#         image = Image.fromarray(image)
-#         return np.array(image.resize(size, resample=Image.BICUBIC))
-#
-#     def _parse_example(episode_path):
-#         FRAMESKIP = 1
-#         IMAGE_SIZE = (256, 256)
-#
-#         h5_filepath = os.path.join(episode_path, 'trajectory.h5')
-#         recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
-#
-#         traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-#
-#         # try:
-#         #     traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-#         # except:
-#         #    print(f"Skipping trajectory {episode_path}.")
-#         #    return None
-#         data = traj[::FRAMESKIP]
-#
-#         # get language instructions if available
-#         assert all(t.keys() == data[0].keys() for t in data)
-#
-#         for t in range(len(data)):
-#             for key in data[0]['observation']['image'].keys():
-#                 data[t]['observation']['image'][key] = _resize_and_encode(
-#                     data[t]['observation']['image'][key], IMAGE_SIZE
-#                 )
-#
-#         # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-#         episode = []
-#
-#         for i, step in enumerate(data):
-#             obs = step['observation']
-#             action = step['action']
-#             # camera_type_dict = obs['camera_type']
-#             # wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
-#             # exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
-#
-#             # visualize images
-#
-#             episode.append({
-#                 'observation': {
-#                     'image_0': obs['image']['24259877_right'][..., ::-1],
-#                     'image_1': obs['image']['20521388_left'][..., ::-1],
-#                     'image_2': obs['image']['13062452_left'][..., ::-1],
-#                     'cartesian_position': obs['robot_state']['cartesian_position'],
-#                     'joint_position': obs['robot_state']['joint_positions'],
-#                     'gripper_position': np.array([obs['robot_state']['gripper_position']]),
-#                 },
-#                 'action_dict': {
-#                     'cartesian_position': action['cartesian_position'],
-#                     'cartesian_velocity': action['cartesian_velocity'],
-#                     'gripper_position': np.array([action['gripper_position']]),
-#                     'gripper_velocity': np.array([action['gripper_delta']]),
-#                     'joint_position': action['joint_position'],
-#                     'joint_velocity': action['joint_velocity'],
-#                 },
-#                 'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
-#                 'discount': 1.0,
-#                 'reward': float(i == (len(data) - 1)),
-#                 'is_first': i == 0,
-#                 'is_last': i == (len(data) - 1),
-#                 'is_terminal': i == (len(data) - 1),
-#                 'language_instruction': language_instruction,
-#                 'language_embedding': dummy_language_embedding,
-#             })
-#
-#         # except:
-#         #    print(f"Skipping trajectory {episode_path}.")
-#         #    return None
-#
-#         # create output data sample
-#         sample = {
-#             'steps': episode,
-#             'episode_metadata': {
-#                 'file_path': h5_filepath,
-#                 'recording_folderpath': recording_folderpath
-#             }
-#         }
-#         # if you want to skip an example for whatever reason, simply return None
-#         return episode_path, sample
-#
-#     # for smallish datasets, use single-thread parsing
-#     for sample in paths:
-#        yield _parse_example(sample)
+def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
+
+    def _resize_and_encode(image, size):
+        image = Image.fromarray(image)
+        return np.array(image.resize(size, resample=Image.BICUBIC))
+
+    def _parse_example(episode_path):
+        FRAMESKIP = 1
+        IMAGE_SIZE = (256, 256)
+
+        h5_filepath = os.path.join(episode_path, 'trajectory.h5')
+        recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
+
+        traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+
+        # try:
+        #     traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        # except:
+        #    print(f"Skipping trajectory {episode_path}.")
+        #    return None
+        data = traj[::FRAMESKIP]
+
+        # get language instructions if available
+        assert all(t.keys() == data[0].keys() for t in data)
+
+        for t in range(len(data)):
+            for key in data[0]['observation']['image'].keys():
+                data[t]['observation']['image'][key] = _resize_and_encode(
+                    data[t]['observation']['image'][key], IMAGE_SIZE
+                )
+
+        # assemble episode --> here we're assuming demos so we set reward to 1 at the end
+        episode = []
+
+        for i, step in enumerate(data):
+            obs = step['observation']
+            action = step['action']
+            # camera_type_dict = obs['camera_type']
+            # wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
+            # exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
+
+            # visualize images
+
+            episode.append({
+                'observation': {
+                    'image_0': obs['image']['24259877_right'][..., ::-1],
+                    'image_1': obs['image']['20521388_left'][..., ::-1],
+                    'image_2': obs['image']['13062452_left'][..., ::-1],
+                    'cartesian_position': obs['robot_state']['cartesian_position'],
+                    'joint_position': obs['robot_state']['joint_positions'],
+                    'gripper_position': np.array([obs['robot_state']['gripper_position']]),
+                },
+                'action_dict': {
+                    'cartesian_position': action['cartesian_position'],
+                    'cartesian_velocity': action['cartesian_velocity'],
+                    'gripper_position': np.array([action['gripper_position']]),
+                    'gripper_velocity': np.array([action['gripper_delta']]),
+                    'joint_position': action['joint_position'],
+                    'joint_velocity': action['joint_velocity'],
+                },
+                'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
+                'discount': 1.0,
+                'reward': float(i == (len(data) - 1)),
+                'is_first': i == 0,
+                'is_last': i == (len(data) - 1),
+                'is_terminal': i == (len(data) - 1),
+                'language_instruction': language_instruction,
+                'language_embedding': dummy_language_embedding,
+            })
+
+        # except:
+        #    print(f"Skipping trajectory {episode_path}.")
+        #    return None
+
+        # create output data sample
+        sample = {
+            'steps': episode,
+            'episode_metadata': {
+                'file_path': h5_filepath,
+                'recording_folderpath': recording_folderpath
+            }
+        }
+        # if you want to skip an example for whatever reason, simply return None
+        return episode_path, sample
+
+    # for smallish datasets, use single-thread parsing
+    for sample in paths:
+       yield _parse_example(sample)
 
 
 class CVP(tfds.core.GeneratorBasedBuilder):
@@ -748,284 +747,285 @@ class CVP(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
         split_paths = self._split_paths()
-        return {split: self._generate_examples(paths=split_paths[split]) for split in split_paths}
+        return {split: _generate_examples(paths=split_paths[split]) for split in split_paths}
 
     def _generate_examples(self, paths):
-        def _resize_and_encode(image, size):
-            image = Image.fromarray(image)
-            return np.array(image.resize(size, resample=Image.BICUBIC))
+        pass
+        # def _resize_and_encode(image, size):
+        #     image = Image.fromarray(image)
+        #     return np.array(image.resize(size, resample=Image.BICUBIC))
+        #
+        # def _parse_example(episode_path):
+        #     FRAMESKIP = 1
+        #     IMAGE_SIZE = (256, 256)
+        #
+        #     h5_filepath = os.path.join(episode_path, 'trajectory.h5')
+        #     recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
+        #
+        #     traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        #
+        #     # try:
+        #     #     traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        #     # except:
+        #     #    print(f"Skipping trajectory {episode_path}.")
+        #     #    return None
+        #     data = traj[::FRAMESKIP]
+        #
+        #     # get language instructions if available
+        #     assert all(t.keys() == data[0].keys() for t in data)
+        #
+        #     for t in range(len(data)):
+        #         for key in data[0]['observation']['image'].keys():
+        #             data[t]['observation']['image'][key] = _resize_and_encode(
+        #                 data[t]['observation']['image'][key], IMAGE_SIZE
+        #             )
+        #
+        #     # assemble episode --> here we're assuming demos so we set reward to 1 at the end
+        #     episode = []
+        #
+        #     for i, step in enumerate(data):
+        #         obs = step['observation']
+        #         action = step['action']
+        #         # camera_type_dict = obs['camera_type']
+        #         # wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
+        #         # exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
+        #
+        #         # visualize images
+        #         # for cam_id in ['24259877_right', '20521388_left', '13062452_left']:
+        #         #     img = obs['image'][cam_id][..., ::-1]
+        #         #     img = Image.fromarray(img)
+        #         #     img.save(os.path.join('./image', f"{cam_id}.png"))
+        #
+        #
+        #         episode.append({
+        #             'observation': {
+        #                 'image_0': obs['image']['24259877_right'][..., ::-1],
+        #                 'image_1': obs['image']['20521388_left'][..., ::-1],
+        #                 'image_2': obs['image']['13062452_left'][..., ::-1],
+        #                 'cartesian_position': obs['robot_state']['cartesian_position'],
+        #                 'joint_position': obs['robot_state']['joint_positions'],
+        #                 'gripper_position': np.array([obs['robot_state']['gripper_position']]),
+        #             },
+        #             'action_dict': {
+        #                 'cartesian_position': action['cartesian_position'],
+        #                 'cartesian_velocity': action['cartesian_velocity'],
+        #                 'gripper_position': np.array([action['gripper_position']]),
+        #                 'gripper_velocity': np.array([action['gripper_delta']]),
+        #                 'joint_position': action['joint_position'],
+        #                 'joint_velocity': action['joint_velocity'],
+        #             },
+        #             'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
+        #             'discount': 1.0,
+        #             'reward': float(i == (len(data) - 1)),
+        #             'is_first': i == 0,
+        #             'is_last': i == (len(data) - 1),
+        #             'is_terminal': i == (len(data) - 1),
+        #             'language_instruction': language_instruction,
+        #             'language_embedding': dummy_language_embedding,
+        #         })
+        #
+        #     # except:
+        #     #    print(f"Skipping trajectory {episode_path}.")
+        #     #    return None
+        #
+        #     # create output data sample
+        #     sample = {
+        #         'steps': episode,
+        #         'episode_metadata': {
+        #             'file_path': h5_filepath,
+        #             'recording_folderpath': recording_folderpath
+        #         }
+        #     }
+        #     # if you want to skip an example for whatever reason, simply return None
+        #     return episode_path, sample
+        #
+        # # for smallish datasets, use single-thread parsing
+        # print(f"Generating {len(paths)} examples...")
+        # for sample in paths:
+        #     yield _parse_example(sample)
 
-        def _parse_example(episode_path):
-            FRAMESKIP = 1
-            IMAGE_SIZE = (256, 256)
+    def _download_and_prepare(  # pytype: disable=signature-mismatch  # overriding-parameter-type-checks
+            self,
+            dl_manager: download.DownloadManager,
+            download_config: download.DownloadConfig,
+    ) -> None:
+        """Generate all splits and returns the computed split infos."""
+        split_builder = ParallelSplitBuilder(
+            split_dict=self.info.splits,
+            features=self.info.features,
+            dataset_size=self.info.dataset_size,
+            max_examples_per_split=download_config.max_examples_per_split,
+            beam_options=download_config.beam_options,
+            beam_runner=download_config.beam_runner,
+            file_format=self.info.file_format,
+            shard_config=download_config.get_shard_config(),
+            split_paths=self._split_paths(),
+            parse_function=self._generate_examples,
+        )
+        split_generators = self._split_generators(dl_manager)
+        split_generators = split_builder.normalize_legacy_split_generators(
+            split_generators=split_generators,
+            generator_fn=self._generate_examples,
+            is_beam=False,
+        )
+        dataset_builder._check_split_names(split_generators.keys())
 
-            h5_filepath = os.path.join(episode_path, 'trajectory.h5')
-            recording_folderpath = os.path.join(episode_path, 'recordings', 'MP4')
+        # Start generating data for all splits
+        path_suffix = file_adapters.ADAPTER_FOR_FORMAT[
+            self.info.file_format
+        ].FILE_SUFFIX
 
-            traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
+        split_info_futures = []
+        for split_name, generator in utils.tqdm(
+                split_generators.items(),
+                desc="Generating splits...",
+                unit=" splits",
+                leave=False,
+        ):
+            filename_template = naming.ShardedFileTemplate(
+                split=split_name,
+                dataset_name=self.name,
+                data_dir=self.data_path,
+                filetype_suffix=path_suffix,
+            )
+            future = split_builder.submit_split_generation(
+                split_name=split_name,
+                generator=generator,
+                filename_template=filename_template,
+                disable_shuffling=self.info.disable_shuffling,
+            )
+            split_info_futures.append(future)
 
-            # try:
-            #     traj = load_trajectory(h5_filepath, recording_folderpath=recording_folderpath)
-            # except:
-            #    print(f"Skipping trajectory {episode_path}.")
-            #    return None
-            data = traj[::FRAMESKIP]
+        # Finalize the splits (after apache beam completed, if it was used)
+        split_infos = [future.result() for future in split_info_futures]
 
-            # get language instructions if available
-            assert all(t.keys() == data[0].keys() for t in data)
-
-            for t in range(len(data)):
-                for key in data[0]['observation']['image'].keys():
-                    data[t]['observation']['image'][key] = _resize_and_encode(
-                        data[t]['observation']['image'][key], IMAGE_SIZE
-                    )
-
-            # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-            episode = []
-
-            for i, step in enumerate(data):
-                obs = step['observation']
-                action = step['action']
-                # camera_type_dict = obs['camera_type']
-                # wrist_ids = [k for k, v in camera_type_dict.items() if v == 0]
-                # exterior_ids = [k for k, v in camera_type_dict.items() if v != 0]
-
-                # visualize images
-                # for cam_id in ['24259877_right', '20521388_left', '13062452_left']:
-                #     img = obs['image'][cam_id][..., ::-1]
-                #     img = Image.fromarray(img)
-                #     img.save(os.path.join('./image', f"{cam_id}.png"))
-
-
-                episode.append({
-                    'observation': {
-                        'image_0': obs['image']['24259877_right'][..., ::-1],
-                        'image_1': obs['image']['20521388_left'][..., ::-1],
-                        'image_2': obs['image']['13062452_left'][..., ::-1],
-                        'cartesian_position': obs['robot_state']['cartesian_position'],
-                        'joint_position': obs['robot_state']['joint_positions'],
-                        'gripper_position': np.array([obs['robot_state']['gripper_position']]),
-                    },
-                    'action_dict': {
-                        'cartesian_position': action['cartesian_position'],
-                        'cartesian_velocity': action['cartesian_velocity'],
-                        'gripper_position': np.array([action['gripper_position']]),
-                        'gripper_velocity': np.array([action['gripper_delta']]),
-                        'joint_position': action['joint_position'],
-                        'joint_velocity': action['joint_velocity'],
-                    },
-                    'action': np.concatenate((action['cartesian_position'], [action['gripper_position']])),
-                    'discount': 1.0,
-                    'reward': float(i == (len(data) - 1)),
-                    'is_first': i == 0,
-                    'is_last': i == (len(data) - 1),
-                    'is_terminal': i == (len(data) - 1),
-                    'language_instruction': language_instruction,
-                    'language_embedding': dummy_language_embedding,
-                })
-
-            # except:
-            #    print(f"Skipping trajectory {episode_path}.")
-            #    return None
-
-            # create output data sample
-            sample = {
-                'steps': episode,
-                'episode_metadata': {
-                    'file_path': h5_filepath,
-                    'recording_folderpath': recording_folderpath
-                }
-            }
-            # if you want to skip an example for whatever reason, simply return None
-            return episode_path, sample
-
-        # for smallish datasets, use single-thread parsing
-        print(f"Generating {len(paths)} examples...")
-        for sample in paths:
-            yield _parse_example(sample)
-
-    # def _download_and_prepare(  # pytype: disable=signature-mismatch  # overriding-parameter-type-checks
-    #         self,
-    #         dl_manager: download.DownloadManager,
-    #         download_config: download.DownloadConfig,
-    # ) -> None:
-    #     """Generate all splits and returns the computed split infos."""
-    #     split_builder = ParallelSplitBuilder(
-    #         split_dict=self.info.splits,
-    #         features=self.info.features,
-    #         dataset_size=self.info.dataset_size,
-    #         max_examples_per_split=download_config.max_examples_per_split,
-    #         beam_options=download_config.beam_options,
-    #         beam_runner=download_config.beam_runner,
-    #         file_format=self.info.file_format,
-    #         shard_config=download_config.get_shard_config(),
-    #         split_paths=self._split_paths(),
-    #         parse_function=self._generate_examples,
-    #     )
-    #     split_generators = self._split_generators(dl_manager)
-    #     split_generators = split_builder.normalize_legacy_split_generators(
-    #         split_generators=split_generators,
-    #         generator_fn=self._generate_examples,
-    #         is_beam=False,
-    #     )
-    #     dataset_builder._check_split_names(split_generators.keys())
-    #
-    #     # Start generating data for all splits
-    #     path_suffix = file_adapters.ADAPTER_FOR_FORMAT[
-    #         self.info.file_format
-    #     ].FILE_SUFFIX
-    #
-    #     split_info_futures = []
-    #     for split_name, generator in utils.tqdm(
-    #             split_generators.items(),
-    #             desc="Generating splits...",
-    #             unit=" splits",
-    #             leave=False,
-    #     ):
-    #         filename_template = naming.ShardedFileTemplate(
-    #             split=split_name,
-    #             dataset_name=self.name,
-    #             data_dir=self.data_path,
-    #             filetype_suffix=path_suffix,
-    #         )
-    #         future = split_builder.submit_split_generation(
-    #             split_name=split_name,
-    #             generator=generator,
-    #             filename_template=filename_template,
-    #             disable_shuffling=self.info.disable_shuffling,
-    #         )
-    #         split_info_futures.append(future)
-    #
-    #     # Finalize the splits (after apache beam completed, if it was used)
-    #     split_infos = [future.result() for future in split_info_futures]
-    #
-    #     # Update the info object with the splits.
-    #     split_dict = splits_lib.SplitDict(split_infos)
-    #     self.info.set_splits(split_dict)
+        # Update the info object with the splits.
+        split_dict = splits_lib.SplitDict(split_infos)
+        self.info.set_splits(split_dict)
 
 
-# class _SplitInfoFuture:
-#     """Future containing the `tfds.core.SplitInfo` result."""
-#
-#     def __init__(self, callback: Callable[[], splits_lib.SplitInfo]):
-#         self._callback = callback
-#
-#     def result(self) -> splits_lib.SplitInfo:
-#         return self._callback()
-#
-#
-# def parse_examples_from_generator(paths, split_name, total_num_examples, features, serializer):
-#     generator = _generate_examples(paths)
-#     outputs = []
-#     for sample in utils.tqdm(
-#             generator,
-#             desc=f'Generating {split_name} examples...',
-#             unit=' examples',
-#             total=total_num_examples,
-#             leave=False,
-#             mininterval=1.0,
-#     ):
-#         if sample is None: continue
-#         key, example = sample
-#         try:
-#             example = features.encode_example(example)
-#         except Exception as e:  # pylint: disable=broad-except
-#             utils.reraise(e, prefix=f'Failed to encode example:\n{example}\n')
-#         outputs.append((key, serializer.serialize_example(example)))
-#     return outputs
-#
-#
-# class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
-#     def __init__(self, *args, split_paths, parse_function, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self._split_paths = split_paths
-#         self._parse_function = parse_function
-#
-#     def _build_from_generator(
-#             self,
-#             split_name: str,
-#             generator: Iterable[KeyExample],
-#             filename_template: naming.ShardedFileTemplate,
-#             disable_shuffling: bool,
-#     ) -> _SplitInfoFuture:
-#         """Split generator for example generators.
-#
-#         Args:
-#           split_name: str,
-#           generator: Iterable[KeyExample],
-#           filename_template: Template to format the filename for a shard.
-#           disable_shuffling: Specifies whether to shuffle the examples,
-#
-#         Returns:
-#           future: The future containing the `tfds.core.SplitInfo`.
-#         """
-#         total_num_examples = None
-#         serialized_info = self._features.get_serialized_info()
-#         writer = ResumeWriter(
-#             serializer=example_serializer.ExampleSerializer(serialized_info),
-#             filename_template=filename_template,
-#             hash_salt=split_name,
-#             disable_shuffling=disable_shuffling,
-#             file_format=self._file_format,
-#             shard_config=self._shard_config,
-#             resume_dir=RESUME_DIR,
-#         )
-#
-#         del generator  # use parallel generators instead
-#         paths = self._split_paths[split_name]
-#         path_lists = chunk_max(paths, N_WORKERS, MAX_PATHS_IN_MEMORY)  # generate N file lists
-#         print(f"Generating with {N_WORKERS} workers!")
-#         pool = Pool(processes=N_WORKERS)
-#         for i in range(START_CHUNK, len(path_lists)):
-#             paths = path_lists[i]
-#             print(f"Processing chunk {i + 1} of {len(path_lists)}.")
-#             results = pool.map(
-#                 partial(
-#                     parse_examples_from_generator,
-#                     split_name=split_name,
-#                     total_num_examples=total_num_examples,
-#                     serializer=writer._serializer,
-#                     features=self._features
-#                 ),
-#                 paths
-#             )
-#             # write results to shuffler --> this will automatically offload to disk if necessary
-#             print("Writing conversion results...")
-#             for result in itertools.chain(*results):
-#                 key, serialized_example = result
-#                 try:
-#                     writer._shuffler.add(key, serialized_example)
-#                     writer._num_examples += 1
-#                 except:
-#                     print(f"Failed to write episode {key}")
-#                     continue
-#         pool.close()
-#
-#         print("Finishing split conversion...")
-#         shard_lengths, total_size = writer.finalize()
-#
-#         split_info = splits_lib.SplitInfo(
-#             name=split_name,
-#             shard_lengths=shard_lengths,
-#             num_bytes=total_size,
-#             filename_template=filename_template,
-#         )
-#         return _SplitInfoFuture(lambda: split_info)
+class _SplitInfoFuture:
+    """Future containing the `tfds.core.SplitInfo` result."""
 
-# def dictlist2listdict(DL):
-#     " Converts a dict of lists to a list of dicts "
-#     return [dict(zip(DL, t)) for t in zip(*DL.values())]
-#
-# def chunks(l, n):
-#     """Yield n number of sequential chunks from l."""
-#     d, r = divmod(len(l), n)
-#     for i in range(n):
-#         si = (d + 1) * (i if i < r else r) + d * (0 if i < r else i - r)
-#         yield l[si:si + (d + 1 if i < r else d)]
-#
-# def chunk_max(l, n, max_chunk_sum):
-#     out = []
-#     for _ in range(int(np.ceil(len(l) / max_chunk_sum))):
-#         out.append(list(chunks(l[:max_chunk_sum], n)))
-#         l = l[max_chunk_sum:]
-#     return out
+    def __init__(self, callback: Callable[[], splits_lib.SplitInfo]):
+        self._callback = callback
+
+    def result(self) -> splits_lib.SplitInfo:
+        return self._callback()
+
+
+def parse_examples_from_generator(paths, split_name, total_num_examples, features, serializer):
+    generator = _generate_examples(paths)
+    outputs = []
+    for sample in utils.tqdm(
+            generator,
+            desc=f'Generating {split_name} examples...',
+            unit=' examples',
+            total=total_num_examples,
+            leave=False,
+            mininterval=1.0,
+    ):
+        if sample is None: continue
+        key, example = sample
+        try:
+            example = features.encode_example(example)
+        except Exception as e:  # pylint: disable=broad-except
+            utils.reraise(e, prefix=f'Failed to encode example:\n{example}\n')
+        outputs.append((key, serializer.serialize_example(example)))
+    return outputs
+
+
+class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
+    def __init__(self, *args, split_paths, parse_function, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._split_paths = split_paths
+        self._parse_function = parse_function
+
+    def _build_from_generator(
+            self,
+            split_name: str,
+            generator: Iterable[KeyExample],
+            filename_template: naming.ShardedFileTemplate,
+            disable_shuffling: bool,
+    ) -> _SplitInfoFuture:
+        """Split generator for example generators.
+
+        Args:
+          split_name: str,
+          generator: Iterable[KeyExample],
+          filename_template: Template to format the filename for a shard.
+          disable_shuffling: Specifies whether to shuffle the examples,
+
+        Returns:
+          future: The future containing the `tfds.core.SplitInfo`.
+        """
+        total_num_examples = None
+        serialized_info = self._features.get_serialized_info()
+        writer = ResumeWriter(
+            serializer=example_serializer.ExampleSerializer(serialized_info),
+            filename_template=filename_template,
+            hash_salt=split_name,
+            disable_shuffling=disable_shuffling,
+            file_format=self._file_format,
+            shard_config=self._shard_config,
+            resume_dir=RESUME_DIR,
+        )
+
+        del generator  # use parallel generators instead
+        paths = self._split_paths[split_name]
+        path_lists = chunk_max(paths, N_WORKERS, MAX_PATHS_IN_MEMORY)  # generate N file lists
+        print(f"Generating with {N_WORKERS} workers!")
+        pool = Pool(processes=N_WORKERS)
+        for i in range(START_CHUNK, len(path_lists)):
+            paths = path_lists[i]
+            print(f"Processing chunk {i + 1} of {len(path_lists)}.")
+            results = pool.map(
+                partial(
+                    parse_examples_from_generator,
+                    split_name=split_name,
+                    total_num_examples=total_num_examples,
+                    serializer=writer._serializer,
+                    features=self._features
+                ),
+                paths
+            )
+            # write results to shuffler --> this will automatically offload to disk if necessary
+            print("Writing conversion results...")
+            for result in itertools.chain(*results):
+                key, serialized_example = result
+                try:
+                    writer._shuffler.add(key, serialized_example)
+                    writer._num_examples += 1
+                except:
+                    print(f"Failed to write episode {key}")
+                    continue
+        pool.close()
+
+        print("Finishing split conversion...")
+        shard_lengths, total_size = writer.finalize()
+
+        split_info = splits_lib.SplitInfo(
+            name=split_name,
+            shard_lengths=shard_lengths,
+            num_bytes=total_size,
+            filename_template=filename_template,
+        )
+        return _SplitInfoFuture(lambda: split_info)
+
+def dictlist2listdict(DL):
+    " Converts a dict of lists to a list of dicts "
+    return [dict(zip(DL, t)) for t in zip(*DL.values())]
+
+def chunks(l, n):
+    """Yield n number of sequential chunks from l."""
+    d, r = divmod(len(l), n)
+    for i in range(n):
+        si = (d + 1) * (i if i < r else r) + d * (0 if i < r else i - r)
+        yield l[si:si + (d + 1 if i < r else d)]
+
+def chunk_max(l, n, max_chunk_sum):
+    out = []
+    for _ in range(int(np.ceil(len(l) / max_chunk_sum))):
+        out.append(list(chunks(l[:max_chunk_sum], n)))
+        l = l[max_chunk_sum:]
+    return out
