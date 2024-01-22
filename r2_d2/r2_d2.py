@@ -41,8 +41,9 @@ MAX_PATHS_IN_MEMORY = 600            # number of paths converted & stored in mem
                                     # note that one path may yield multiple episodes and adjust accordingly
 
 # optionally provide info to resume conversion from a previous run
-RESUME_DIR = "/nfs/kun2/datasets/r2d2/tfds/r2_d2/1.0.0.incomplete0DSARA"
-START_CHUNK = 81
+#RESUME_DIR = "/nfs/kun2/datasets/r2d2/tfds/r2_d2/1.0.0.incomplete0DSARA"
+RESUME_DIR = None #"/nfs/kun2/datasets/r2d2/tfds/r2_d2_2/r2_d2/1.0.0.incompleteASWPLN"
+START_CHUNK = 0 #82
 
 
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
@@ -736,7 +737,7 @@ class R2D2(tfds.core.GeneratorBasedBuilder):
         """Define data splits."""
         # create list of all examples
         print("Crawling all episode paths...")
-        episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2-data-full')
+        episode_paths = [] #crawler('/nfs/kun2/datasets/r2d2/r2d2-data-full')
         # episode_paths = crawler('/nfs/kun2/datasets/r2d2/r2d2_iris_finetune')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
@@ -881,6 +882,7 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
             disable_shuffling=disable_shuffling,
             file_format=self._file_format,
             shard_config=self._shard_config,
+            resume_dir=RESUME_DIR,
         )
 
         del generator  # use parallel generators instead
@@ -888,7 +890,7 @@ class ParallelSplitBuilder(split_builder_lib.SplitBuilder):
         path_lists = chunk_max(paths, N_WORKERS, MAX_PATHS_IN_MEMORY)  # generate N file lists
         print(f"Generating with {N_WORKERS} workers!")
         pool = Pool(processes=N_WORKERS)
-        for i in range(START_CHUNK, len(path_lists)):
+        for i in []: #range(START_CHUNK, len(path_lists)):
             paths = path_lists[i]
             print(f"Processing chunk {i + 1} of {len(path_lists)}.")
             results = pool.map(

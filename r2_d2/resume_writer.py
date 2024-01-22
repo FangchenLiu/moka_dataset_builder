@@ -49,10 +49,14 @@ class ResumeWriter(Writer):
     if len(tmp_bucket_files) > 0:
         print("Resuming...")
         for tmp_bucket_file in tqdm.tqdm(tmp_bucket_files):
-            for key, data in read_bucket(tmp_bucket_file):
-                self._shuffler.add(key, data)
-                self._num_examples += 1
-        print("Finished resuming!")
+            try:
+                for key, data in tqdm.tqdm(read_bucket(tmp_bucket_file)):
+                    self._shuffler.add(key, data)
+                    self._num_examples += 1
+            except:
+                print(f"Skipping bucket {tmp_bucket_file}")
+                continue
+        print(f"Finished resuming! Added {self._num_examples} examples.")
 
 
 class SafeShuffler(Shuffler):
