@@ -1,5 +1,4 @@
 import argparse
-import cvp
 import tqdm
 import importlib
 import os
@@ -22,15 +21,15 @@ else:
 
 
 # create TF dataset
-dataset_name = 'cvp'
+dataset_name = 'table_wiping'
 print(f"Visualizing data from dataset: {dataset_name}")
 module = importlib.import_module(dataset_name)
-ds = tfds.load(dataset_name, data_dir='/hdd/data', split='train')
+ds = tfds.load(dataset_name, data_dir='/hdd/data/cvp_rlds', split='train')
 # ds = ds.filter(lambda episode: tf.strings.regex_full_match(episode['episode_metadata']['recording_folderpath'], '.*RAIL.*'))
 # ds = ds.shuffle(100)
 
 # visualize episodes
-for i, episode in enumerate(ds.take(50)):
+for i, episode in enumerate(ds.take(184)):
     images = []
     images_1 = []
     images_2 = []
@@ -39,17 +38,26 @@ for i, episode in enumerate(ds.take(50)):
         images_1.append(step['observation']['image_1'].numpy())
         images_2.append(step['observation']['image_2'].numpy())
     
-    image_strip = np.concatenate(images[-20:][::4], axis=1)
+    image_strip_1 = np.concatenate(images[-20:][::4], axis=1)
+    image_strip_2 = np.concatenate(images_1[-20:][::4], axis=1)
+    image_strip_3 = np.concatenate(images_2[-20:][::4], axis=1)
+
+    image_strip_4 = np.concatenate(images[:20][::4], axis=1)
+    image_strip_5 = np.concatenate(images_1[:20][::4], axis=1)
+    image_strip_6 = np.concatenate(images_2[:20][::4], axis=1)
+
     caption = step['language_instruction'].numpy().decode() + ' (temp. downsampled 4x)'
 
     if render_wandb:
-        #wandb.log({f'image_{i}': wandb.Image(image_strip, caption=caption)})
-        # wandb.log({f'last_{i}_1': wandb.Image(images[-1])})
-        # wandb.log({f'last_{i}_2': wandb.Image(images_1[-1])})
-        wandb.log({f'last_{i}_wrist': wandb.Image(images_2[-1])})
+        wandb.log({f'image_end_{i}': wandb.Image(image_strip_1, caption=caption)})
+        wandb.log({f'image_end_{i}': wandb.Image(image_strip_2, caption=caption)})
+        wandb.log({f'image_end_{i}': wandb.Image(image_strip_3, caption=caption)})
+        wandb.log({f'image_beg_{i}': wandb.Image(image_strip_4, caption=caption)})
+        wandb.log({f'image_beg_{i}': wandb.Image(image_strip_5, caption=caption)})
+        wandb.log({f'image_beg_{i}': wandb.Image(image_strip_6, caption=caption)})
     else:
         plt.figure()
-        plt.imshow(image_strip)
+        plt.imshow(image_strip_1)
         plt.title(caption)
 exit(0)
 

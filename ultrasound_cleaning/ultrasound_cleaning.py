@@ -427,13 +427,14 @@ def crop_image(image, crop):
 
 def crop_camera_obs(camera_obs, timestep):
     # camera_obs: dict of camera_id -> image
-    if 'crop' in timestep['observation']:
-        crop = timestep['observation']['crop']
-    else:
-        crop = {
-            '24259877_right': np.array([325, 0, 700, 765]),
-            '20521388_left': np.array([0, 350, 500, 850])
-        }
+    # if 'crop' in timestep['observation']:
+    #     crop = timestep['observation']['crop']
+    # else:
+    crop = {
+        '24259877_right': np.array([275, 0, 700, 765]),
+        '20521388_left': np.array([0, 350, 500, 850]),
+        '13062452_left': np.array([0, 400, 720, 1280])
+    }
 
     # print(crop.keys())
     # print(camera_obs['image'].keys())
@@ -619,12 +620,12 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
        yield _parse_example(sample)
 
 
-class CVP(tfds.core.GeneratorBasedBuilder):
+class ULTRASOUND_CLEANING(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
 
-    VERSION = tfds.core.Version('6.0.0')
+    VERSION = tfds.core.Version('1.0.0')
     RELEASE_NOTES = {
-      '6.0.0': 'press button',
+      '1.0.0': 'All ultrasound cleaning data',
     }
 
     def __init__(self, *args, **kwargs):
@@ -755,7 +756,7 @@ class CVP(tfds.core.GeneratorBasedBuilder):
         episode_paths = crawler('/hdd/data/cvp_raw/ultrasound_cleaning/success')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
-                         os.path.exists(p + '/recordings/MP4') and p.endswith('_1')]
+                         os.path.exists(p + '/recordings/MP4')]
         print(f"Found {len(episode_paths)} episodes!")
         return {
             'train': episode_paths,
