@@ -1,4 +1,4 @@
-name: rlds_env_cvp
+name: rlds_env_moka
 channels:
   - conda-forge
 dependencies:

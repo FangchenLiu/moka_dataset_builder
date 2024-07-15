@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import wandb
 import tensorflow as tf
 
-WANDB_ENTITY = 'fliu'
+WANDB_ENTITY = 'moka'
 WANDB_PROJECT = 'vis_rlds'
 
 if WANDB_ENTITY is not None:
@@ -24,7 +24,8 @@ else:
 dataset_name = 'table_wiping'
 print(f"Visualizing data from dataset: {dataset_name}")
 module = importlib.import_module(dataset_name)
-ds = tfds.load(dataset_name, data_dir='/hdd/data/cvp_rlds', split='train')
+# change to your data directory
+ds = tfds.load(dataset_name, data_dir='/hdd/data/moka_rlds', split='train')
 # ds = ds.filter(lambda episode: tf.strings.regex_full_match(episode['episode_metadata']['recording_folderpath'], '.*RAIL.*'))
 # ds = ds.shuffle(100)
 
