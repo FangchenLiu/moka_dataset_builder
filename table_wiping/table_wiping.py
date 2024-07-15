@@ -429,7 +429,7 @@ def crop_camera_obs(camera_obs, timestep):
     # camera_obs: dict of camera_id -> image
 
     crop = {
-        '24259877_right': np.array([275, 0, 700, 765]),
+        '24259877_right': np.array([285, 0, 700, 765]),
         '20521388_left': np.array([0, 350, 500, 850]),
         '13062452_left': np.array([0, 400, 720, 1280])
     }

@@ -129,8 +129,8 @@ START_CHUNK = 0
 _embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-large/5")
 
 language_instruction_dict = {
-    'stage_0': 'Put the watch into the ultrasound cleaner.',
-    'stage_1': 'Press the red button to start cleaning.',
+    'stage_0': 'Put the eyeglass into eyeglass case.',
+    'stage_1': 'Sweep the snack package on the table.',
 }
 
 language_embedding_dict = {
@@ -427,8 +427,9 @@ def crop_image(image, crop):
 
 def crop_camera_obs(camera_obs, timestep):
     # camera_obs: dict of camera_id -> image
+
     crop = {
-        '24259877_right': np.array([275, 0, 700, 800]),
+        '24259877_right': np.array([285, 0, 700, 765]),
         '20521388_left': np.array([0, 350, 500, 850]),
         '13062452_left': np.array([0, 400, 720, 1280])
     }
@@ -617,12 +618,12 @@ def _generate_examples(paths) -> Iterator[Tuple[str, Any]]:
        yield _parse_example(sample)
 
 
-class BUTTON(tfds.core.GeneratorBasedBuilder):
+class LAPTOP(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
 
-    VERSION = tfds.core.Version('1.0.0')
+    VERSION = tfds.core.Version('2.0.0')
     RELEASE_NOTES = {
-      '1.0.0': 'press button',
+      '2.0.0': 'laptop stage 1',
     }
 
     def __init__(self, *args, **kwargs):
@@ -750,7 +751,7 @@ class BUTTON(tfds.core.GeneratorBasedBuilder):
         """Define data splits."""
         # create list of all examples
         print("Crawling all episode paths...")
-        episode_paths = crawler('/hdd/data/cvp_raw/ultrasound_cleaning/success')
+        episode_paths = crawler('/hdd/data/cvp_raw/laptop_packing/success')
         print(f"Found {len(episode_paths)} candidates.")
         episode_paths = [p for p in episode_paths if os.path.exists(p + '/trajectory.h5') and \
                          os.path.exists(p + '/recordings/MP4') and p.endswith('_1')]
