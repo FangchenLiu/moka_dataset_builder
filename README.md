@@ -20,26 +20,12 @@ If you want to manually create an environment, the key packages to install are `
 `tensorflow_datasets`, `tensorflow_hub`, `apache_beam`, `matplotlib`, `plotly` and `wandb`.
 
 
-## Run Example RLDS Dataset Creation
-
-Before modifying the code to convert your own dataset, run the provided example dataset creation script to ensure
-everything is installed correctly. Run the following lines to create some dummy data and convert it to RLDS.
-```
-cd example_dataset
-python3 create_example_data.py
-tfds build
-```
-
-This should create a new dataset in `~/tensorflow_datasets/example_dataset`. Please verify that the example
-conversion worked before moving on.
-
-
 ## Converting your Own Dataset to RLDS
 
 Now we can modify the provided example to convert your own data. Follow the steps below:
 
-1. **Rename Dataset**: Change the name of the dataset folder from `example_dataset` to the name of your dataset (e.g. robo_net_v2), 
-also change the name of `example_dataset_dataset_builder.py` by replacing `example_dataset` with your dataset's name (e.g. robo_net_v2_dataset_builder.py)
+1. **Rename Dataset**: Change the name of the dataset folder from `table_wiping` to the name of your dataset (e.g. robo_net_v2), 
+also change the name of `table_wiping.py` by replacing `table_wiping` with your dataset's name (e.g. robo_net_v2_dataset_builder.py)
 and change the class name `ExampleDataset` in the same file to match your dataset's name, using camel case instead of underlines (e.g. RoboNetV2).
 
 2. **Modify Features**: Modify the data fields you plan to store in the dataset. You can find them in the `_info()` method
